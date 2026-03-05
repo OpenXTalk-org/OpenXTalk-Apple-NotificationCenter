@@ -1,15 +1,9 @@
 # OpenXTalk-Apple-NotificationCenter
 
-This libarary enables a simply way to connect Apple's NSNotificationCenter to add observers for various messages from Cocoa APIs
-observers in order to trigger callbacack messages posted to the engine from the xBuilder Handler, this is done by passiing a
-Handler for the ^block (as ObjcBlockPointer), a message then gets posted to the calling Script Object (stack,card,control),
-it's a 'callback' to the scripting engine. A list of the currently registered Notification objects is maintained by the module.
+This libarary enables a simply way to connect Apple's NSNotificationCenter to add observers for various messages from Cocoa APIs in order to trigger callbacack messages posted to the engine from the xBuilder Handler, this is done by passiing a Handler for the ^block (as ObjcBlockPointer), a message then gets posted to the calling ScriptObject (stack,card,control), it's 'callback' to the scripting engine. A list of the currently registered Notification objects is maintained by the module.
 
 NOTE:
-Many of the AppKit ans NSWindow Notification Names used as examples, may already Handled by the Engine. When the engine
-handles the such a message it's translated to traditional xTalk message names such as 'on closeStack'
-For examples "NSWindowDidResignMainNotification" is effectively the same message as 'on suspendStack' handler.
-and "NSWindowDidBecomeMainNotification" is effectively the same message as that 'on resumeStack' handler would be
+Many of the AppKit, NSWindow, NSMenu, etc. observer Notifications used as examples are already Handled by the Engine. When the engine handles the such a message it's translated to traditional xTalk message names such as 'on closeStack' For examples "NSWindowDidResignMainNotification" is effectively the same message as 'on suspendStack' handler and "NSWindowDidBecomeMainNotification" is effectively the same message as that 'on resumeStack' handler would be
 
 macOS iOS
 
