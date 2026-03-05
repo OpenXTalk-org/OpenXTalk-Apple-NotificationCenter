@@ -1,0 +1,245 @@
+/*
+Copyright (C) 2018 LiveCode Ltd.
+
+This file is part of LiveCode.
+
+LiveCode is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3 as published by the Free
+Software Foundation.
+
+LiveCode is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+You should have received a copy of the GNU General Public License
+along with LiveCode.  If not see <http://www.gnu.org/licenses/>.
+*/
+
+/**
+Title: Extension Package Handling Utilities
+
+Type: library
+
+Summary: This library enables connecting the scripts to Apple's NSNotificationCenter to register observer callbacks for various API messages.
+
+Version: 1.0.0
+
+Description:
+
+This libarary enables a simply way to connect Apple's NSNotificationCenter to add observers for various messages from Cocoa APIs
+observers in order to trigger callbacack messages posted to the engine from the xBuilder Handler, this is done by passiing a
+Handler for the ^block (as ObjcBlockPointer), a message then gets posted to the calling Script Object (stack,card,control),
+it's a 'callback' to the scripting engine. A list of the currently registered Notification objects is maintained by the module.
+NOTE: Many of the AppKit ans NSWindow Notification Names used as examples, may already Handled by the Engine. When the engine
+handles the such a message it's translated to traditional xTalk message names such as 'on closeStack'
+For examples "NSWindowDidResignMainNotification" is effectively the same message as 'on suspendStack' handler.
+and "NSWindowDidBecomeMainNotification" is effectively the same message as that 'on resumeStack' handler would be.
+*/
+
+library org.openxtalk.applenotificationcenter
+use com.livecode.engine
+use com.livecode.foreign
+use com.livecode.objc
+use com.livecode.array
+
+-- NSNotificationCenter
+foreign handler ObjC_NSNotificationCenterDefaultCenter() returns ObjcId binds to "objc:NSNotificationCenter.+defaultCenter"
+
+foreign handler ObjC_AddObserverForName(in pCenter as ObjcId, in pName as optional ObjcId, in pObject as optional ObjcId, in pQueue as optional ObjcId, in pBlock as ObjcBlockPointer) \
+	returns ObjcId binds to "objc:NSNotificationCenter.-addObserverForName:object:queue:usingBlock:"
+
+foreign handler ObjC_RemoveObserver(in pCenter as ObjcId, in pObserver as ObjcId) returns nothing binds to "objc:NSNotificationCenter.-removeObserver:"
+
+-- NSNotification
+foreign handler ObjC_NotificationName(in pNote as ObjcId) returns ObjcId binds to "objc:NSNotification.-name"
+
+-- NSString
+foreign handler ObjC_NSStringWithUTF8String(in pBytes as ZStringNative) returns ObjcId binds to "objc:NSString.+stringWithUTF8String:"
+foreign handler ObjC_NSStringUTF8String(in pString as ObjcId) returns ZStringNative binds to "objc:NSString.-UTF8String"
+
+-- Block type matching ^(NSNotification *)
+handler type NotificationBlock(in pNote as ObjcId) returns nothing
+public variable mBlock as optional ObjcBlockPointer
+
+-- Retained tokens — one per registered notification name
+private variable mObservers as optional Array
+
+-- A reference to the calling object (stack,card, or control), to post messages to.
+-- This is currently is set each time an observer is registered, but should
+-- add handler to allow to explicitly setting this:
+private variable mTarget as ScriptObject
+
+-- Central block handler — all notifications funnel through here
+public handler OnNotification(in pBlockPointer as ObjcBlockPointer, in pNSNotification as ObjcId) returns nothing
+   -- LogNSObjectReflection(pNSNotification)
+   variable tName as String
+   unsafe
+  	 put StringFromNSString( ObjC_NotificationName( pNSNotification ) ) into tName
+   end unsafe
+	-- log[tName]
+   post "notificationReceived" to mTarget with [tName]
+end handler
+
+public handler NSNotificationAddObserver(in pName as String) returns nothing
+	if pName is not "" then
+		put the caller into mTarget
+	   variable tToken as optional ObjcObject
+	   CreateObjcBlockPointerFromHandler( OnNotification , mBlock)
+	   unsafe
+			-- You cna pass 'nothing'/nil for pName, but you'll get *ALL* Notifications coming in and probably crash the engine!
+		   -- put ObjC_AddObserverForName( ObjC_NSNotificationCenterDefaultCenter(), nothing , nothing, nothing, mBlock) into tToken
+		   put ObjC_AddObserverForName( ObjC_NSNotificationCenterDefaultCenter(), StringToNSString( pName ), nothing, nothing, mBlock) into tToken
+	   end unsafe
+	   if mObservers is nothing then
+	      put {} into mObservers
+	   end if
+	   put tToken into mObservers[pName]
+	end if
+end handler
+
+public handler NSNotificationRemoveObserver(in pName as String) returns nothing
+   if mObservers is nothing then
+      return
+   end if
+   if pName is among the keys of mObservers then
+      unsafe
+	     ObjC_RemoveObserver(ObjC_NSNotificationCenterDefaultCenter(), mObservers[pName])
+        delete mObservers[pName]
+		  log "removed observer "&& pName
+      end unsafe
+   end if
+end handler
+
+public handler NSNotificationRemoveAllObservers() returns nothing
+	if mBlock is nothing then
+		return -- break
+	end if
+   variable tName as String
+   unsafe
+	   repeat for each key tName in mObservers
+	      ObjC_RemoveObserver( ObjC_NSNotificationCenterDefaultCenter(), mObservers[ tName ] )
+			log "removed observer "&& tName
+		end repeat
+   end unsafe
+   put {} into mObservers
+	put nothing into mBlock
+end handler
+/*
+----------------------------- HANDLERS TO HELP DEBUG --------------------------
+----------------------  NSObject ------------------------------------------------------------------------------
+private foreign handler objC_NSObjectRetain(in pNSObj as ObjcId) returns ObjcId binds to "objc:NSObject.-retain"
+private foreign handler objC_NSObjectAutoRealease(in pNSObj as ObjcId) returns ObjcId binds to "objc:NSObject.-autorelease"
+private foreign handler objC_NSObjectRelease(in pNSObj as ObjcId) returns nothing binds to "objc:NSObject.-release"
+
+private foreign handler objC_NSObjectGetDescription(in pNSObj as ObjcId) returns ObjcId binds to "objc:NSObject.description"
+private foreign handler objC_NSObjectDescription(in pNSObj as optional ObjcId) returns ObjcId binds to "objc:NSObject.description"
+private foreign handler objC_NSObjectClassDescription(in pNSObject as ObjcId) returns optional ObjcId binds to "objc:NSObject.-classDescription"
+private foreign handler ObjC_NSObjectGetAttributeKeys( in pNSObjct as ObjcId) returns optional ObjcId binds to "objc:NSObject.-attributeKeys"
+private foreign handler objC_NSObjectAttributeKeys(in pNSObject as ObjcId) returns optional ObjcId binds to "objc:NSObject.attributeKeys"
+
+private foreign handler objC_NSObjectClassName(in pNSObj as ObjcId) returns ObjcId binds to "objc:NSObject.className"
+private foreign handler ObjC_NSObjectGetClassNamed( in pNSClassName as ObjcId) returns optional ObjcId binds to "objc:NSObject.-classNamed:"
+public foreign handler objC_NSObjectsGetClassDescriptionForClass(in pClasss as ObjcId) returns optional ObjcRetainedId binds to "objc:NSClassDescription.+classDescriptionForClass:"
+-- private foreign handler objC_NSObjectGetSuperClass(in pNSObj as ObjcId) returns ObjcRetainedId binds to "c:NObject.+superclass:"
+private foreign handler objC_NSObjectGetSuperClass(in pNSObj as ObjcId) returns ObjcId binds to "objc:NSObject.superclass"
+-- private foreign handler objC_NSObjectGetSuperClass(in pNSObj as ObjcId) returns ObjcRetainedId binds to "c:NObject.+superclass:"
+private foreign handler ObjC_NSObjectIsKindOfClass(in pObject as ObjcId, in pClass as ObjcId) returns CBool binds to "objc:NSObject.-isKindOfClass:"
+
+private foreign handler objC_NSObjectSetValueForKey(in pAVAUSampler as ObjcId, in pValue as ObjcId, in pSelector as ObjcId) returns optional ObjcId binds to "objc:NSObject.-setValue:forKey:"
+private foreign handler objC_NSObjectGetValueForKey(in pNSObject as ObjcId, in pSelector as ObjcId) returns optional ObjcId binds to "objc:NSObject.-valueForKey:"
+
+---------------------  NSError
+private foreign handler objC_NSErrorAlloc() returns ObjcRetainedId binds to "objc:NSError.+alloc"
+-- private foreign handler objC_NSErrorAlloc() returns ObjcId binds to "objc:NSError.+alloc"
+
+private foreign handler c_NSClassFromString(in pClassNameString as ObjcId) returns ObjcId binds to "c:NSClassFromString"
+private foreign handler c_class_copyPropertyList(in pClass as ObjcId, out pCount as UInt32) returns optional Pointer binds to "c:class_copyPropertyList"
+
+public handler LogNSObjectReflection(in pNSObj as optional ObjcId)
+   variable tOSStatus as CSInt
+   variable tNSStrObj as optional ObjcId
+   variable tNSObjB as optional ObjcId
+   variable tStr as optional String
+   variable tClass as ObjcId
+   variable tPropsCount as optional UInt32
+   variable tClassDescription as optional ObjcId
+   variable tListNSObj as optional ObjcId
+   variable tListOpaquePtr as optional Pointer -- to an array of 'objc_property_t'
+   variable tListArray as optional Array
+   variable tList as optional List
+   variable tString as optional ZStringNative
+   variable tCStringPtr as optional Pointer
+   variable tSuccess as CBool
+   variable rOutArrayPtr as optional Pointer
+
+   if pNSObj is not nothing then
+      unsafe
+         put objC_NSObjectClassName(pNSObj) into tNSStrObj
+         put StringFromNSString(tNSStrObj) into tStr
+         log ["Class Name" , tStr]
+         put c_NSClassFromString(tNSStrObj) into tClass
+
+         put objC_NSObjectGetSuperClass(pNSObj) into tNSObjB
+         put objC_NSObjectClassName(tNSObjB) into tNSStrObj
+         put StringFromNSString(tNSStrObj) into tStr
+         log ["SuperClass" , tStr]
+
+         put objC_NSObjectGetDescription(pNSObj) into tNSStrObj
+         put StringFromNSString(tNSStrObj) into tStr
+         log ["Description" , tStr]
+
+         -- GetNSObjectAttributeKeys(pNSObj)
+         put ObjC_NSObjectGetAttributeKeys(pNSObj) into tListNSObj
+         -- put ListFromNSArray(tNSObjB) into tList
+         if tListNSObj is not nothing then
+            log  ["AttributeKeys obj" , tListNSObj]
+            put StringFromNSString(tListNSObj) into tStr
+            log ["AttributeKeys" , tStr]
+         end if
+         put c_class_copyPropertyList(tClass,tPropsCount) into tListOpaquePtr
+         log ["Props List Count and Pointer", tPropsCount,tListOpaquePtr ]
+      end unsafe
+   else
+      log "No Object"
+   end if
+end handler
+*/
+--___________________ END OF DEBUG HANDLERS_________________--
+
+end library
+
+/*
+-- Register any notification by name
+NotificationObserve "NSProcessInfoThermalStateDidChangeNotification"
+NotificationObserve "NSWorkspaceScreensDidSleepNotification"
+NotificationObserve "NSWorkspaceScreensDidWakeNotification"
+
+-- A single handler can catch all Notifications:
+on notificationReceived pName
+   switch pName
+      case "NSProcessInfoThermalStateDidChangeNotification"
+         put "Thermal state changed" into field "log"
+         break
+      case "NSWorkspaceScreensDidSleepNotification"
+         put "Screen slept" into field "log"
+         break
+      case "NSWorkspaceScreensDidWakeNotification"
+         put "Screen woke" into field "log"
+         break
+   end switch
+end notificationReceived
+
+-- Remove one observer from the list of currently register observers
+NotificationRemove "NSWorkspaceScreensDidSleepNotification"
+
+-- Or clean up everything
+NotificationRemoveAll
+
+Why This Works So Cleanly
+-- addObserverForName:object:queue:usingBlock: returns an opaque token rather than requiring a delegate object,
+-- and passing nothing for both object and queue means it matches any sender and delivers on whichever thread posted the notification.
+-- The post call in OnNotification then marshals safely back to the LiveCode engine regardless of which thread the notification arrived on.
+-- The mObservers array keyed by notification name means you can register as many notifications as you like,
+-- each holding its own retention token, all funnelling through the single OnNotification block into the single notificationReceived message.
+*/

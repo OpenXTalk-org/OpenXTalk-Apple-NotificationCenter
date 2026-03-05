@@ -1,0 +1,19 @@
+<package version="0.0">
+  <name>org.openxtalk.applenotificationcenter</name>
+  <license>community</license>
+  <type>library</type>
+  <requires name="com.livecode.objc"/>
+  <requires name="com.livecode.foreign"/>
+  <requires name="com.livecode.engine"/>
+  <requires name="com.livecode.arithmetic"/>
+  <requires name="com.livecode.binary"/>
+  <requires name="com.livecode.list"/>
+  <requires name="com.livecode.logic"/>
+  <requires name="com.livecode.string"/>
+  <requires name="com.livecode.type"/>
+  <requires name="com.livecode.array"/>
+  <handler name="OnNotification" parameters="in Pointer,in ObjcId" return="nothing"/>
+  <handler name="NSNotificationAddObserver" parameters="in string" return="nothing"/>
+  <handler name="NSNotificationRemoveObserver" parameters="in string" return="nothing"/>
+  <handler name="NSNotificationRemoveAllObservers" parameters="" return="nothing"/>
+</package>
